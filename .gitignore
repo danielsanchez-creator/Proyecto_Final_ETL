@@ -1,0 +1,15 @@
+# Entorno virtual (Librerías)
+venv/
+.venv/
+env/
+
+# Datos pesados (No queremos subirlos a GitHub)
+data/
+*.csv
+*.zip
+*.parquet
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
