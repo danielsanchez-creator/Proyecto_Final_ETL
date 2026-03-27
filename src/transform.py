@@ -1,64 +1,61 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+from deep_translator import GoogleTranslator
+import unidecode
 
-def ejecutar_transformacion(datasets):
-    print("--- Iniciando Transformacion ---")
+def transformar_datos(datasets):
+    print("--- Iniciando Fase de Transformación ---")
     
+    # 1. UNIÓN DE TABLAS
+    df = pd.merge(datasets['orders'], datasets['items'], on='order_id')
+    df = pd.merge(df, datasets['products'], on='product_id')
+    df = pd.merge(df, datasets['customers'], on='customer_id')
+    df = pd.merge(df, datasets['category_translation'], on='product_category_name', how='left')
+    df = pd.merge(df, datasets['reviews'][['order_id', 'review_score', 'review_comment_message']], 
+                  on='order_id', how='left')
+
+    # 2. LIMPIEZA
+    df['review_comment_message'] = df['review_comment_message'].fillna("")
+    df['customer_city'] = df['customer_city'].apply(
+        lambda x: unidecode.unidecode(str(x)).upper() if pd.notnull(x) else x
+    )
+
+    # 3. FINANZAS Y LOGÍSTICA
+    df['price_usd'] = df['price'] / 3.9
+    cols_fecha = ['order_purchase_timestamp', 'order_estimated_delivery_date', 'order_delivered_customer_date']
+    for col in cols_fecha:
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+
+    df['delivery_delta_days'] = (df['order_estimated_delivery_date'] - df['order_delivered_customer_date']).dt.days
+
+    # 4. NLP Y SENTIMIENTO
+    def categorizar_sentimiento(score):
+        if score >= 4: return 'Satisfecho (Positivo)'
+        elif score == 3: return 'Neutral'
+        else: return 'Crítico (Negativo)'
+    
+    df['sentiment_es'] = df['review_score'].apply(categorizar_sentimiento)
+
     try:
-        # Extraer dataframes del diccionario enviado por extract.py
-        df_cust = datasets["customers"]
-        df_ord = datasets["orders"]
-        df_items = datasets["items"]
-        df_rev = datasets["reviews"]
-
-        # 1. Uniones (Merge)
-        # Unimos Clientes con Ordenes
-        df_m = pd.merge(df_ord, df_cust[['customer_id', 'customer_city']], on="customer_id")
-        # Unimos con Items (Precio)
-        df_m = pd.merge(df_m, df_items[['order_id', 'price']], on="order_id")
-        # Unimos con Reviews (Score)
-        df_m = pd.merge(df_m, df_rev[['order_id', 'review_score']], on="order_id")
-
-        # 2. Transformaciones de Moneda y Fechas
-        print("Transformando precios a USD y formateando fechas...")
-        tasa_usd = 0.18
-        df_m['price_usd'] = df_m['price'] * tasa_usd
+        translator = GoogleTranslator(source='pt', target='es')
+        mask_quejas = (df['review_score'] <= 2) & (df['review_comment_message'].str.len() > 10)
+        indices_quejas = df[mask_quejas].head(15).index
+        df['review_espanol'] = ""
         
-        columnas_fecha = ["order_purchase_timestamp", "order_approved_at", "order_delivered_customer_date"]
-        for col in columnas_fecha:
-            df_m[col] = pd.to_datetime(df_m[col], errors='coerce')
-
-        # 3. Limpieza de Ciudades
-        df_m['customer_city'] = df_m['customer_city'].str.upper().str.strip()
-
-        # --- GRAFICO 1: TOP 10 CIUDADES ---
-        print("Mostrando grafico de ciudades...")
-        plt.figure(figsize=(10, 6))
-        df_m['customer_city'].value_counts().head(10).plot(kind='bar', color='skyblue')
-        plt.title("Top 10 Ciudades por Volumen de Compras")
-        plt.xlabel("Ciudad")
-        plt.ylabel("Total de Ordenes")
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
-
-        # --- GRAFICO 2: REVIEW SCORE VS PRICE ---
-        print("Mostrando grafico Score vs Precio...")
-        plt.figure(figsize=(10, 6))
-        df_agrupado = df_m.groupby('review_score')['price_usd'].mean()
-        df_agrupado.plot(kind='line', marker='s', color='darkred', linewidth=2)
-        plt.title("Precio Promedio (USD) segun Calificacion de Usuario")
-        plt.xlabel("Review Score (1-5)")
-        plt.ylabel("Precio Promedio en USD")
-        plt.grid(True, linestyle='--', alpha=0.6)
-        plt.tight_layout()
-        plt.show()
-
-        return df_m
-
-    except KeyError as e:
-        print(f"Error: No se encontro la tabla o columna {e}. Revisa el diccionario en extract.py")
-        return None
+        print("Traduciendo muestra de feedback crítico...")
+        for idx in indices_quejas:
+            texto_original = df.at[idx, 'review_comment_message']
+            df.at[idx, 'review_espanol'] = translator.translate(texto_original)
     except Exception as e:
-        print(f"Error inesperado: {e}")
-        return None
+        print(f"Aviso: La traducción falló: {e}")
+
+    # 5. SELECCIÓN DE COLUMNAS
+    columnas_reporte = [
+        'order_id', 'customer_id', 'customer_city', 'customer_state',
+        'product_category_name_english', 'price_usd', 'review_score',
+        'sentiment_es', 'review_comment_message', 'review_espanol',
+        'delivery_delta_days', 'order_purchase_timestamp'
+    ]
+    
+    df_final = df[[c for c in columnas_reporte if c in df.columns]].copy()
+    print(f"Transformación completada: {len(df_final)} registros.")
+    return df_final
