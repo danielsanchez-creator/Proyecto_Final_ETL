@@ -4,7 +4,7 @@ Desarrollo de un ecosistema de datos profesional para el procesamiento de 113,31
 
 Características Principales:
 
-Arquitectura Modular: Separación de fases (Extract, Transform, Load).
+Arquitectura Modular: Separación de fases (Extract, Transform, Load,pipeline,visualized,audit).
 
 Auditoría de Datos: Implementación de un módulo de KPIs de Ingeniería (Tasa de vinculación e integridad semántica).
 
