@@ -49,6 +49,7 @@ def transformar_datos(datasets):
         print(f"Aviso: La traducción falló: {e}")
 
     # 5. SELECCIÓN DE COLUMNAS
+    # --- CAMBIO EN TRANSFORM.PY ---
     columnas_reporte = [
         'order_id', 'customer_id', 'customer_city', 'customer_state',
         'product_category_name_english', 'price_usd', 'review_score',
@@ -56,6 +57,7 @@ def transformar_datos(datasets):
         'delivery_delta_days', 'order_purchase_timestamp'
     ]
     
-    df_final = df[[c for c in columnas_reporte if c in df.columns]].copy()
-    print(f"Transformación completada: {len(df_final)} registros.")
+    # Esta línea asegura que solo se seleccionen las que realmente existen
+    df_final = df[[c for c in columnas_reporte if c in df.columns]].copy() 
+    print(f"Transformación completada: {len(df_final)} registros.") [cite: 223]
     return df_final
